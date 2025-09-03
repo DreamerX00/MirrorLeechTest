@@ -27,7 +27,8 @@ DATABASE_URL = os.environ.get('DATABASE_URL')
 
 # Token configuration
 TOKEN_SECRET_KEY = os.environ.get('TOKEN_SECRET_KEY')
-TOKEN_EXPIRY_HOURS = int(os.environ.get('TOKEN_EXPIRY_HOURS', 6))
+TOKEN_EXPIRY_HOURS = int(os.environ.get('TOKEN_EXPIRY_HOURS', 24))
+TOKEN_TIMEOUT_HOURS = int(os.environ.get('TOKEN_TIMEOUT_HOURS', 24))
 
 # Subscription plans
 BASIC_PLAN_DAYS = int(os.environ.get('BASIC_PLAN_DAYS', 7))

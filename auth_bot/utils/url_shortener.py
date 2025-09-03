@@ -18,8 +18,13 @@ async def shorten_url(long_url: str) -> Optional[str]:
         long_url: The original long URL to shorten
         
     Returns:
-        The shortened URL if successful, None otherwise
+        The shortened URL if successful, original URL if shortener not configured or fails
     """
+    # If no shortener is configured, return the original URL
+    if not shorteners_list and not (URL_SHORTENER_API and URL_SHORTENER_API_KEY):
+        logger.info("No URL shortener configured, returning original URL")
+        return long_url
+    
     # Check if we have shorteners in the list
     if shorteners_list:
         # Randomly select a shortener from the list
@@ -53,7 +58,8 @@ async def shorten_url(long_url: str) -> Optional[str]:
                 logger.warning(f"Unrecognized URL shortener service: {api}. Using TinyURL as fallback.")
                 return await _shorten_with_tinyurl(long_url, key, domain, secure)
         except Exception as e:
-            logger.error(f"Error with shortener {api}: {e}. Trying fallback.")
+            logger.error(f"Error with shortener {api}: {e}. Returning original URL.")
+            return long_url
     
     # Fallback to environment variables if no shorteners in list or if the selected one failed
     if URL_SHORTENER_API and URL_SHORTENER_API_KEY:
@@ -61,30 +67,35 @@ async def shorten_url(long_url: str) -> Optional[str]:
         try:
             # TinyURL API
             if "tinyurl" in URL_SHORTENER_API.lower():
-                return await _shorten_with_tinyurl(long_url)
+                shortened = await _shorten_with_tinyurl(long_url)
+                return shortened if shortened else long_url
             
             # Bitly API
             elif "bitly" in URL_SHORTENER_API.lower():
-                return await _shorten_with_bitly(long_url)
+                shortened = await _shorten_with_bitly(long_url)
+                return shortened if shortened else long_url
             
             # Rebrandly API
             elif "rebrandly" in URL_SHORTENER_API.lower():
-                return await _shorten_with_rebrandly(long_url)
+                shortened = await _shorten_with_rebrandly(long_url)
+                return shortened if shortened else long_url
             
             # Cuttly API
             elif "cuttly" in URL_SHORTENER_API.lower():
-                return await _shorten_with_cuttly(long_url)
+                shortened = await _shorten_with_cuttly(long_url)
+                return shortened if shortened else long_url
             
             # Default to TinyURL if service not recognized
             else:
                 logger.warning(f"Unrecognized URL shortener service: {URL_SHORTENER_API}. Using TinyURL as fallback.")
-                return await _shorten_with_tinyurl(long_url)
+                shortened = await _shorten_with_tinyurl(long_url)
+                return shortened if shortened else long_url
         except Exception as e:
-            logger.error(f"Error shortening URL with environment variables: {e}")
-            return None
+            logger.error(f"Error shortening URL with environment variables: {e}. Returning original URL.")
+            return long_url
     else:
         logger.info("URL shortener not configured, returning original URL")
-        return None
+        return long_url
 
 async def _shorten_with_tinyurl(long_url: str, api_key: str = None, domain: str = None, secure: bool = True) -> Optional[str]:
     """

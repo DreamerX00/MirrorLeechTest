@@ -36,16 +36,35 @@ async def get_subscription_status(user_id: int) -> Optional[Dict[str, Any]]:
                 return cached_subscription
         
         # Get subscription from database
-        subscription = await db.get_subscription(user_id)
+        subscription = await db.get_user_subscription(user_id)
         
-        # Cache subscription data if it exists and is active
-        if subscription and subscription.get("is_active"):
-            subscription_data[user_id] = subscription
+        # Convert subscription object to dict if it exists
+        if subscription:
+            subscription_dict = {
+                "user_id": subscription.user_id,
+                "plan_type": subscription.plan_type,
+                "plan_days": subscription.plan_days,
+                "start_date": subscription.start_date,
+                "end_date": subscription.end_date,
+                "status": subscription.status,
+                "is_active": subscription.is_active,
+                "expiry_date": subscription.end_date,
+                "plan_name": subscription.plan_type.capitalize()
+            }
+            
+            # Cache subscription data if it exists and is active
+            if subscription_dict.get("is_active"):
+                subscription_data[user_id] = subscription_dict
+            elif user_id in subscription_data:
+                # Remove from cache if subscription is not active
+                del subscription_data[user_id]
+            
+            return subscription_dict
         elif user_id in subscription_data:
-            # Remove from cache if subscription is not active
+            # Remove from cache if subscription doesn't exist
             del subscription_data[user_id]
         
-        return subscription
+        return None
     except Exception as e:
         logger.error(f"Error getting subscription status: {e}")
         return None
@@ -73,26 +92,46 @@ async def update_subscription(user_id: int, plan_days: int) -> bool:
             plan_name = "Custom"
         
         # Get current subscription
-        current_subscription = await db.get_subscription(user_id)
+        current_subscription = await db.get_user_subscription(user_id)
         
-        if current_subscription and current_subscription.get("is_active"):
+        if current_subscription and current_subscription.is_active:
             # Extend existing subscription
             success = await db.extend_subscription(user_id, plan_days)
             
             # Update cached subscription data
             if success:
-                updated_subscription = await db.get_subscription(user_id)
+                updated_subscription = await db.get_user_subscription(user_id)
                 if updated_subscription:
-                    subscription_data[user_id] = updated_subscription
+                    subscription_data[user_id] = {
+                        "user_id": updated_subscription.user_id,
+                        "plan_type": updated_subscription.plan_type,
+                        "plan_days": updated_subscription.plan_days,
+                        "start_date": updated_subscription.start_date,
+                        "end_date": updated_subscription.end_date,
+                        "status": updated_subscription.status,
+                        "is_active": updated_subscription.is_active,
+                        "expiry_date": updated_subscription.end_date,
+                        "plan_name": updated_subscription.plan_type.capitalize()
+                    }
         else:
             # Add new subscription
-            success = await db.add_subscription(user_id, plan_days, plan_name)
+            success = await db.add_subscription(user_id, plan_name, plan_days)
             
             # Cache new subscription data
             if success:
-                new_subscription = await db.get_subscription(user_id)
+                new_subscription = await db.get_user_subscription(user_id)
                 if new_subscription:
-                    subscription_data[user_id] = new_subscription
+                    subscription_data[user_id] = {
+                        "user_id": new_subscription.user_id,
+                        "plan_type": new_subscription.plan_type,
+                        "plan_days": new_subscription.plan_days,
+                        "start_date": new_subscription.start_date,
+                        "end_date": new_subscription.end_date,
+                        "status": new_subscription.status,
+                        "is_active": new_subscription.is_active,
+                        "expiry_date": new_subscription.end_date,
+                        "plan_name": new_subscription.plan_type.capitalize()
+                    }
         
         return success
     except Exception as e:

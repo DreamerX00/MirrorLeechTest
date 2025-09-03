@@ -26,6 +26,8 @@ async def main():
         
         # Run the bot
         await bot_main()
+    except KeyboardInterrupt:
+        logger.info("Authorization bot stopped by user")
     except Exception as e:
         logger.error(f"Error running authorization bot: {e}")
         raise

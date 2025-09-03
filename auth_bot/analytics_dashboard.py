@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Auth Bot - Analytics Dashboard
 
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
@@ -131,6 +132,237 @@ class AnalyticsDashboard:
         
         return web.Response(text=html, content_type='text/html')
     
+    async def payments_dashboard(self, request: web_request.Request):
+        """Payments analytics dashboard"""
+        if not await self.verify_admin(request):
+            return web.Response(text="Unauthorized", status=401)
+        
+        payment_analytics = await self.db.get_payment_analytics(30)
+        
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Payments Analytics - WZML-X Auth Bot</title>
+            <meta charset="utf-8">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+                .container { max-width: 1200px; margin: 0 auto; }
+                .header { background: #2c3e50; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+                .nav-links { margin: 20px 0; }
+                .nav-links a { margin-right: 20px; padding: 10px 15px; background: #3498db; color: white; text-decoration: none; border-radius: 5px; }
+                .analytics-card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>💳 Payments Analytics</h1>
+                </div>
+                <div class="nav-links">
+                    <a href="/analytics">🏠 Overview</a>
+                    <a href="/analytics/payments">💳 Payments</a>
+                    <a href="/analytics/subscriptions">📋 Subscriptions</a>
+                    <a href="/analytics/users">👥 Users</a>
+                    <a href="/analytics/usage">📈 Usage</a>
+                </div>
+                <div class="analytics-card">
+                    <h2>Payment Statistics</h2>
+                    <p>Payment analytics will be displayed here</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return web.Response(text=html, content_type='text/html')
+    
+    async def subscriptions_dashboard(self, request: web_request.Request):
+        """Subscriptions analytics dashboard"""
+        if not await self.verify_admin(request):
+            return web.Response(text="Unauthorized", status=401)
+        
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Subscriptions Analytics - WZML-X Auth Bot</title>
+            <meta charset="utf-8">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+                .container { max-width: 1200px; margin: 0 auto; }
+                .header { background: #2c3e50; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+                .nav-links { margin: 20px 0; }
+                .nav-links a { margin-right: 20px; padding: 10px 15px; background: #3498db; color: white; text-decoration: none; border-radius: 5px; }
+                .analytics-card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>📋 Subscriptions Analytics</h1>
+                </div>
+                <div class="nav-links">
+                    <a href="/analytics">🏠 Overview</a>
+                    <a href="/analytics/payments">💳 Payments</a>
+                    <a href="/analytics/subscriptions">📋 Subscriptions</a>
+                    <a href="/analytics/users">👥 Users</a>
+                    <a href="/analytics/usage">📈 Usage</a>
+                </div>
+                <div class="analytics-card">
+                    <h2>Subscription Statistics</h2>
+                    <p>Subscription analytics will be displayed here</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return web.Response(text=html, content_type='text/html')
+    
+    async def users_dashboard(self, request: web_request.Request):
+        """Users analytics dashboard"""
+        if not await self.verify_admin(request):
+            return web.Response(text="Unauthorized", status=401)
+        
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Users Analytics - WZML-X Auth Bot</title>
+            <meta charset="utf-8">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+                .container { max-width: 1200px; margin: 0 auto; }
+                .header { background: #2c3e50; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+                .nav-links { margin: 20px 0; }
+                .nav-links a { margin-right: 20px; padding: 10px 15px; background: #3498db; color: white; text-decoration: none; border-radius: 5px; }
+                .analytics-card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>👥 Users Analytics</h1>
+                </div>
+                <div class="nav-links">
+                    <a href="/analytics">🏠 Overview</a>
+                    <a href="/analytics/payments">💳 Payments</a>
+                    <a href="/analytics/subscriptions">📋 Subscriptions</a>
+                    <a href="/analytics/users">👥 Users</a>
+                    <a href="/analytics/usage">📈 Usage</a>
+                </div>
+                <div class="analytics-card">
+                    <h2>User Statistics</h2>
+                    <p>User analytics will be displayed here</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return web.Response(text=html, content_type='text/html')
+    
+    async def usage_dashboard(self, request: web_request.Request):
+        """Usage analytics dashboard"""
+        if not await self.verify_admin(request):
+            return web.Response(text="Unauthorized", status=401)
+        
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Usage Analytics - WZML-X Auth Bot</title>
+            <meta charset="utf-8">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+                .container { max-width: 1200px; margin: 0 auto; }
+                .header { background: #2c3e50; color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+                .nav-links { margin: 20px 0; }
+                .nav-links a { margin-right: 20px; padding: 10px 15px; background: #3498db; color: white; text-decoration: none; border-radius: 5px; }
+                .analytics-card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>📈 Usage Analytics</h1>
+                </div>
+                <div class="nav-links">
+                    <a href="/analytics">🏠 Overview</a>
+                    <a href="/analytics/payments">💳 Payments</a>
+                    <a href="/analytics/subscriptions">📋 Subscriptions</a>
+                    <a href="/analytics/users">👥 Users</a>
+                    <a href="/analytics/usage">📈 Usage</a>
+                </div>
+                <div class="analytics-card">
+                    <h2>Usage Statistics</h2>
+                    <p>Usage analytics will be displayed here</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return web.Response(text=html, content_type='text/html')
+    
+    # API Endpoints
+    async def api_analytics_summary(self, request: web_request.Request):
+        """API endpoint for analytics summary"""
+        if not await self.verify_admin(request):
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+        
+        try:
+            summary = await self.db.get_analytics_summary(30)
+            return web.json_response(summary)
+        except Exception as e:
+            logger.error(f"Error getting analytics summary: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+    
+    async def api_payment_analytics(self, request: web_request.Request):
+        """API endpoint for payment analytics"""
+        if not await self.verify_admin(request):
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+        
+        try:
+            analytics = await self.db.get_payment_analytics(30)
+            return web.json_response(analytics)
+        except Exception as e:
+            logger.error(f"Error getting payment analytics: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+    
+    async def api_subscription_analytics(self, request: web_request.Request):
+        """API endpoint for subscription analytics"""
+        if not await self.verify_admin(request):
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+        
+        try:
+            analytics = await self.db.get_subscription_analytics(30)
+            return web.json_response(analytics)
+        except Exception as e:
+            logger.error(f"Error getting subscription analytics: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+    
+    async def api_user_analytics(self, request: web_request.Request):
+        """API endpoint for user analytics"""
+        if not await self.verify_admin(request):
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+        
+        try:
+            analytics = await self.db.get_user_analytics(30)
+            return web.json_response(analytics)
+        except Exception as e:
+            logger.error(f"Error getting user analytics: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+    
+    async def api_usage_analytics(self, request: web_request.Request):
+        """API endpoint for usage analytics"""
+        if not await self.verify_admin(request):
+            return web.json_response({'error': 'Unauthorized'}, status=401)
+        
+        try:
+            analytics = await self.db.get_usage_stats(30)
+            return web.json_response(analytics)
+        except Exception as e:
+            logger.error(f"Error getting usage analytics: {e}")
+            return web.json_response({'error': 'Internal server error'}, status=500)
+    
     # API Endpoints
     async def api_analytics_summary(self, request: web_request.Request):
         """API endpoint for analytics summary"""
@@ -141,12 +373,20 @@ class AnalyticsDashboard:
         summary = await self.db.get_analytics_summary(days)
         return web.json_response(summary)
 
-# Global dashboard instance
-analytics_dashboard = AnalyticsDashboard()
+# Global dashboard instance - lazy initialization
+_analytics_dashboard = None
+
+def get_analytics_dashboard():
+    """Get or create analytics dashboard instance"""
+    global _analytics_dashboard
+    if _analytics_dashboard is None:
+        _analytics_dashboard = AnalyticsDashboard()
+    return _analytics_dashboard
 
 async def start_analytics_server():
     """Start the analytics dashboard server"""
     try:
+        analytics_dashboard = get_analytics_dashboard()
         await analytics_dashboard.db.connect()
         
         runner = web.AppRunner(analytics_dashboard.app)
@@ -163,3 +403,4 @@ async def start_analytics_server():
             
     except Exception as e:
         logger.error(f"Error starting analytics server: {e}")
+        logger.info("Bot will continue without analytics dashboard")

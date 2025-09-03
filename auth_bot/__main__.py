@@ -331,7 +331,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Shorten the payment link if URL shortener is configured
         if payment_link:
             short_link = await shorten_url(payment_link)
-            payment_link = short_link if short_link else payment_link
+            # If shortening fails or is not configured, use original link
+            payment_link = short_link if short_link and short_link != payment_link else payment_link
         
         # Payment method display names
         method_names = {
@@ -464,7 +465,7 @@ async def admin_action_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             
             # Shorten the link if URL shortener is configured
             short_link = await shorten_url(verification_link)
-            verification_link = short_link if short_link else verification_link
+            verification_link = short_link if short_link and short_link != verification_link else verification_link
             
             await update.message.reply_text(
                 f"🎟️ *Token Generated Successfully*\n\n"
@@ -560,8 +561,13 @@ async def main() -> None:
     # Start webhook server for automatic payment processing
     asyncio.create_task(start_webhook_server())
     
-    # Start analytics dashboard server
-    asyncio.create_task(start_analytics_server())
+    # Start analytics dashboard server (optional, won't block bot if it fails)
+    try:
+        asyncio.create_task(start_analytics_server())
+        logger.info("Analytics dashboard server task created")
+    except Exception as e:
+        logger.error(f"Failed to start analytics dashboard: {e}")
+        logger.info("Bot will continue without analytics dashboard")
 
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
@@ -579,8 +585,30 @@ async def main() -> None:
     # Add error handler
     application.add_error_handler(error_handler)
 
-    # Start the Bot
-    application.run_polling()
+    # Initialize and start the bot
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    
+    # Keep the application running
+    try:
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Received interrupt signal, shutting down...")
+    finally:
+        await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
+
+def run_bot():
+    """Entry point to run the bot"""
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Bot crashed: {e}")
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    run_bot()

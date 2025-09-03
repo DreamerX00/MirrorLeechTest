@@ -44,7 +44,7 @@ async def get_subscription_status(user_id: int) -> Dict:
             del subscription_cache[user_id]
     
     # Get subscription from database
-    subscription = await get_subscription(user_id)
+    subscription = await db.get_user_subscription(user_id)
     
     if not subscription:
         # Return default free tier subscription
@@ -54,22 +54,81 @@ async def get_subscription_status(user_id: int) -> Dict:
             "is_active": True,
             "start_date": datetime.now(),
             "expiry_date": None,
-            "commands": FREE_TIER_COMMANDS.split(",") if FREE_TIER_COMMANDS else []
+            "commands": FREE_TIER_COMMANDS if FREE_TIER_COMMANDS else []
         }
     
+    # Convert subscription object to dict
+    subscription_dict = {
+        "user_id": subscription.user_id,
+        "plan": subscription.plan_type,
+        "is_active": subscription.is_active,
+        "start_date": subscription.start_date,
+        "expiry_date": subscription.end_date,
+        "commands": "*" if subscription.is_active else FREE_TIER_COMMANDS
+    }
+    
     # Check if subscription is expired
-    if subscription["expiry_date"] and subscription["expiry_date"] < datetime.now():
+    if subscription_dict["expiry_date"] and subscription_dict["expiry_date"] < datetime.now():
         # Handle expired subscription
-        await handle_expired_subscription(user_id, subscription)
+        await handle_expired_subscription(user_id, subscription_dict)
         
         # Get updated subscription after handling expiration
-        subscription = await get_subscription(user_id)
+        subscription_dict = await get_subscription_status(user_id)
     
     # Cache active subscriptions
-    if subscription and subscription["is_active"]:
-        subscription_cache[user_id] = subscription
+    if subscription_dict and subscription_dict["is_active"]:
+        subscription_cache[user_id] = subscription_dict
     
-    return subscription
+    return subscription_dict
+
+
+async def get_subscription(user_id: int) -> Optional[Dict]:
+    """Get subscription from database (helper function)"""
+    subscription = await db.get_user_subscription(user_id)
+    if not subscription:
+        return None
+    
+    return {
+        "user_id": subscription.user_id,
+        "plan": subscription.plan_type,
+        "is_active": subscription.is_active,
+        "start_date": subscription.start_date,
+        "expiry_date": subscription.end_date,
+        "commands": "*" if subscription.is_active else FREE_TIER_COMMANDS
+    }
+
+
+async def update_subscription(user_id: int, subscription_data: Dict) -> Dict:
+    """Update subscription in database"""
+    try:
+        # Update subscription in database
+        plan_days = (subscription_data["expiry_date"] - subscription_data["start_date"]).days
+        success = await db.add_subscription(
+            user_id=user_id,
+            plan_type=subscription_data["plan"],
+            plan_days=plan_days
+        )
+        
+        if success:
+            return subscription_data
+        else:
+            logger.error(f"Failed to update subscription for user {user_id}")
+            return subscription_data
+    except Exception as e:
+        logger.error(f"Error updating subscription: {e}")
+        return subscription_data
+
+
+async def revoke_subscription(user_id: int) -> bool:
+    """Revoke a user's subscription"""
+    try:
+        success = await db.update_subscription(user_id, is_active=False)
+        if success and user_id in subscription_cache:
+            del subscription_cache[user_id]
+        return success
+    except Exception as e:
+        logger.error(f"Error revoking subscription for user {user_id}: {e}")
+        return False
 
 
 async def update_user_subscription(user_id: int, plan_days: int) -> Dict:
@@ -161,11 +220,11 @@ async def handle_expired_subscription(user_id: int, subscription: Dict) -> None:
             # Update subscription in database
             await update_subscription(user_id, free_tier_data)
             
-            # Update user status
-            await update_user(user_id, {"subscription_status": "free"})
+            # Update subscription status
+            await db.update_subscription(user_id, is_active=False)
         else:
-            # Update user status to inactive
-            await update_user(user_id, {"subscription_status": "inactive"})
+            # Update subscription status to inactive
+            await db.update_subscription(user_id, is_active=False)
     
     # Send notification about expired subscription
     await send_subscription_expired_notification(user_id, subscription["plan"])
@@ -213,57 +272,100 @@ async def get_expiring_soon_subscriptions() -> List[Dict]:
     return expiring_subscriptions
 
 
-async def process_expired_subscriptions() -> int:
+async def process_expired_subscriptions() -> List[int]:
     """
-    Process all expired subscriptions.
+    Process all expired subscriptions and perform necessary actions.
     
     Returns:
-        Number of processed subscriptions
+        List of user IDs whose subscriptions were processed
     """
-    # Get expired subscriptions
-    expired_subscriptions = await get_expiring_subscriptions(0, include_expired=True)
+    logger.info("Processing expired subscriptions...")
+    processed_users = []
     
-    count = 0
-    for subscription in expired_subscriptions:
-        if subscription["expiry_date"] < datetime.now() and subscription["is_active"]:
+    try:
+        # Ensure database connection
+        if not db._connected:
+            await db.connect()
+            
+        # Get expired subscriptions from database
+        expired_subscriptions = await db.get_expired_subscriptions()
+        
+        for subscription_data in expired_subscriptions:
+            user_id = subscription_data["user_id"]
+            
             # Handle expired subscription
-            await handle_expired_subscription(subscription["user_id"], subscription)
-            count += 1
-    
-    return count
+            await handle_expired_subscription(user_id, subscription_data)
+            processed_users.append(user_id)
+            
+            # Clear from cache
+            if user_id in subscription_cache:
+                del subscription_cache[user_id]
+                
+        logger.info(f"Processed {len(processed_users)} expired subscriptions")
+        return processed_users
+        
+    except Exception as e:
+        logger.error(f"Error processing expired subscriptions: {e}")
+        return processed_users
 
 
-async def get_renewal_options(user_id: int) -> Dict:
+async def get_expiring_subscriptions(days_ahead: int, include_expired: bool = False) -> List[Dict]:
+    """Get subscriptions expiring within specified days"""
+    try:
+        # Ensure database connection
+        if not db._connected:
+            await db.connect()
+            
+        end_date = datetime.now() + timedelta(days=days_ahead)
+        start_date = datetime.now() - timedelta(days=1) if include_expired else datetime.now()
+        
+        # Query database for subscriptions expiring soon
+        pipeline = [
+            {
+                "$match": {
+                    "end_date": {"$gte": start_date, "$lte": end_date},
+                    "status": "active"
+                }
+            }
+        ]
+        
+        cursor = db.db.subscriptions.aggregate(pipeline)
+        return await cursor.to_list(length=None)
+    except Exception as e:
+        logger.error(f"Error getting expiring subscriptions: {e}")
+        return []
+
+
+async def get_user(user_id: int) -> Optional[Dict]:
+    """Get user information from database"""
+    try:
+        user = await db.get_user(user_id)
+        return user.__dict__ if user else None
+    except Exception as e:
+        logger.error(f"Error getting user {user_id}: {e}")
+        return None
+
+
+async def get_renewal_options(user_id: int) -> List[Dict]:
     """
-    Get subscription renewal options for a user.
+    Get available renewal options for a user.
     
     Args:
         user_id: The Telegram user ID
         
     Returns:
-        Dictionary with renewal options
+        List of available renewal plans
     """
-    # Get current subscription
-    subscription = await get_subscription_status(user_id)
-    
-    # Get user details
     user = await get_user(user_id)
     
-    options = {
-        "current_plan": subscription["plan"],
-        "expiry_date": subscription["expiry_date"],
-        "is_active": subscription["is_active"],
-        "can_renew": True,
-        "recommended_plan": "standard",  # Default recommendation
-        "has_payment_method": bool(user.get("payment_method")),
-        "available_plans": ["basic", "standard", "premium"],
-        "free_tier_available": bool(FREE_TIER_FALLBACK)
-    }
+    if not user:
+        return []
     
-    # Customize recommendation based on usage patterns
-    if user.get("usage_count", 0) > 100:
-        options["recommended_plan"] = "premium"
-    elif user.get("usage_count", 0) < 20:
-        options["recommended_plan"] = "basic"
+    # Standard renewal options
+    renewal_options = [
+        {"plan": "basic", "days": 7, "price": 5.0},
+        {"plan": "standard", "days": 30, "price": 15.0},
+        {"plan": "premium", "days": 90, "price": 40.0}
+    ]
     
-    return options
+    return renewal_options

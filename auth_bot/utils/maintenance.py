@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta
 
 from auth_bot import NOTIFICATION_ENABLED
-from auth_bot.utils.subscription_manager import process_expired_subscriptions, get_expiring_soon_subscriptions
+from auth_bot.utils.subscription_manager import process_expired_subscriptions
 from auth_bot.utils.notification import send_expiry_notification
 
 logger = logging.getLogger(__name__)
@@ -22,17 +22,21 @@ async def maintenance_task() -> None:
             
             # Send notifications for expiring subscriptions if enabled
             if NOTIFICATION_ENABLED:
-                expiring_subscriptions = await get_expiring_soon_subscriptions()
+                from auth_bot.utils.subscription_manager import get_expiring_subscriptions
+                expiring_subscriptions = await get_expiring_subscriptions(7)
                 for subscription in expiring_subscriptions:
-                    days_left = (subscription["expiry_date"] - datetime.now()).days
+                    expiry_date = subscription.get("end_date", datetime.now())
+                    days_left = (expiry_date - datetime.now()).days
                     
                     # Send notifications at 7, 3, and 1 days before expiry
                     if days_left in [7, 3, 1]:
+                        subscription_dict = {
+                            "expiry_date": expiry_date,
+                            "plan": subscription.get("plan_type", "unknown")
+                        }
                         await send_expiry_notification(
                             subscription["user_id"],
-                            subscription["plan"],
-                            subscription["expiry_date"],
-                            days_left
+                            subscription_dict
                         )
             
             # Wait for next run (every hour)

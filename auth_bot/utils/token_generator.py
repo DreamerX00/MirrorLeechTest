@@ -5,10 +5,14 @@ import base64
 import json
 import time
 import uuid
+import hmac
+import hashlib
+import jwt
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
+from cryptography.fernet import Fernet
 
-from auth_bot import TOKEN_EXPIRY_HOURS
+from auth_bot import TOKEN_EXPIRY_HOURS, TOKEN_SECRET_KEY
 from auth_bot.database.db_handler import DBManager
 from auth_bot.utils.notification import send_token_notification
 
@@ -16,6 +20,39 @@ logger = logging.getLogger(__name__)
 
 # Initialize database
 db = DBManager()
+
+# Initialize encryption key
+try:
+    encryption_key = Fernet(base64.urlsafe_b64encode(TOKEN_SECRET_KEY[:32].ljust(32, '0').encode()))
+except Exception as e:
+    logger.error(f"Failed to initialize encryption key: {e}")
+    encryption_key = None
+
+
+async def get_token_by_value(token: str) -> Optional[Dict]:
+    """Get token data from database by token value"""
+    return await db.get_token(token)
+
+
+async def invalidate_token(token: str) -> bool:
+    """Mark token as used in database"""
+    return await db.use_token(token)
+
+
+async def get_user(user_id: int) -> Optional[Dict]:
+    """Get user data from database"""
+    user = await db.get_user(user_id)
+    return user.__dict__ if user else None
+
+
+async def update_user(user_id: int, update_data: Dict) -> bool:
+    """Update user data in database"""
+    try:
+        await db.update_user_activity(user_id)
+        return True
+    except Exception as e:
+        logger.error(f"Error updating user {user_id}: {e}")
+        return False
 
 
 async def generate_token(user_id: int, plan_days: int = 0) -> str:
@@ -56,7 +93,7 @@ async def generate_token(user_id: int, plan_days: int = 0) -> str:
         token = f"{encoded_data}.{signature}"
         
         # Store token in database
-        await db.save_token(user_id, token, token_data)
+        await db.add_token(token, user_id, datetime.fromtimestamp(token_data["expires_at"]))
         
         logger.info(f"Generated token for user {user_id} with {plan_days} days")
         return token
@@ -108,7 +145,7 @@ async def generate_access_token(user_id: int, subscription_days: int) -> str:
         subscription_days: Number of days for the subscription
         
     Returns:
-        Encrypted JWT token string
+        JWT token string
     """
     # Get user information
     user = await get_user(user_id)
@@ -126,31 +163,43 @@ async def generate_access_token(user_id: int, subscription_days: int) -> str:
         "iat": int(time.time())
     }
     
-    # Generate JWT token
-    jwt_token = jwt.encode(payload, TOKEN_SECRET_KEY, algorithm="HS256")
-    
-    # Encrypt the token for additional security
-    encrypted_token = encryption_key.encrypt(jwt_token.encode()).decode()
-    
-    # Update user with token information
-    await update_user(user_id, {"access_token": encrypted_token})
-    
-    return encrypted_token
+    try:
+        # Generate JWT token
+        jwt_token = jwt.encode(payload, TOKEN_SECRET_KEY, algorithm="HS256")
+        
+        # Encrypt the token for additional security if encryption is available
+        if encryption_key:
+            encrypted_token = encryption_key.encrypt(jwt_token.encode()).decode()
+            await update_user(user_id, {"access_token": encrypted_token})
+            return encrypted_token
+        else:
+            await update_user(user_id, {"access_token": jwt_token})
+            return jwt_token
+    except Exception as e:
+        logger.error(f"Error generating access token: {e}")
+        return ""
 
 
-async def verify_access_token(encrypted_token: str) -> Tuple[bool, Optional[Dict]]:
+async def verify_access_token(token: str) -> Tuple[bool, Optional[Dict]]:
     """
-    Verify an encrypted JWT access token.
+    Verify a JWT access token (encrypted or plain).
     
     Args:
-        encrypted_token: The encrypted JWT token to verify
+        token: The JWT token to verify
         
     Returns:
         Tuple of (is_valid, token_data)
     """
     try:
-        # Decrypt the token
-        jwt_token = encryption_key.decrypt(encrypted_token.encode()).decode()
+        jwt_token = token
+        
+        # Try to decrypt if encryption is available
+        if encryption_key:
+            try:
+                jwt_token = encryption_key.decrypt(token.encode()).decode()
+            except Exception:
+                # If decryption fails, assume it's a plain JWT
+                pass
         
         # Verify and decode JWT token
         payload = jwt.decode(jwt_token, TOKEN_SECRET_KEY, algorithms=["HS256"])
@@ -161,8 +210,11 @@ async def verify_access_token(encrypted_token: str) -> Tuple[bool, Optional[Dict
             return False, None
         
         return True, payload
-    except (jwt.InvalidTokenError, jwt.ExpiredSignatureError) as e:
-        logger.error(f"Invalid access token: {e}")
+    except jwt.InvalidTokenError as e:
+        logger.error(f"Invalid JWT token: {e}")
+        return False, None
+    except jwt.ExpiredSignatureError as e:
+        logger.error(f"Expired JWT token: {e}")
         return False, None
     except Exception as e:
         logger.error(f"Error verifying access token: {e}")
@@ -189,7 +241,8 @@ async def generate_verification_url(user_id: int, plan_days: int = 0) -> str:
     # Create verification URL
     verification_url = f"https://t.me/{TARGET_BOT_USERNAME}?start=verify_{token}"
     
-    # Shorten URL
+    # Shorten URL if shortener is available
     shortened_url = await shorten_url(verification_url)
     
-    return shortened_url or verification_url
+    # Return shortened URL if available, otherwise return original
+    return shortened_url if shortened_url and shortened_url != verification_url else verification_url

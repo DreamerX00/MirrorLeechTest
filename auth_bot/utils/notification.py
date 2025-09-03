@@ -203,3 +203,44 @@ async def send_token_notification(user_id, token, plan_name):
     except Exception as e:
         logger.error(f"Failed to send token notification: {e}")
         return False
+
+
+# Helper functions for backwards compatibility
+async def send_expiry_notification(user_id: int, subscription: dict) -> bool:
+    """Send expiry notification for a subscription"""
+    manager = NotificationManager()
+    days_left = (subscription.get("expiry_date", datetime.now()) - datetime.now()).days
+    return await manager.send_expiry_notification(user_id, days_left)
+
+
+async def send_subscription_activated_notification(user_id: int, plan_name: str, expiry_date: datetime) -> bool:
+    """Send subscription activated notification"""
+    manager = NotificationManager()
+    return await manager.send_subscription_activated(user_id, plan_name, expiry_date)
+
+
+async def send_subscription_expired_notification(user_id: int, plan_name: str) -> bool:
+    """Send subscription expired notification"""
+    try:
+        bot = Bot(AUTH_BOT_TOKEN)
+        message = f"❌ *Subscription Expired* ❌\n\n"
+        message += f"Your *{plan_name}* subscription has expired.\n"
+        message += "Please renew to continue using the service.\n\n"
+        message += "Use /subscription to view available plans."
+        
+        await bot.send_message(
+            chat_id=user_id,
+            text=message,
+            parse_mode='Markdown'
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send expiry notification: {e}")
+        return False
+
+
+async def setup_notification_scheduler():
+    """Setup the notification scheduler"""
+    logger.info("Notification scheduler setup completed")
+    # This would typically set up a background task
+    # For now, just log that it's been called
