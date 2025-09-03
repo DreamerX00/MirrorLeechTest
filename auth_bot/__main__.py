@@ -47,10 +47,16 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user = update.effective_user
     user_id = user.id
     
-    # Check if user exists in database, if not, add them
-    if not await db.user_exists(user_id):
-        await db.add_user(user_id, user.username, user.first_name)
-        logger.info(f"New user added: {user_id}")
+    logger.info(f"Start command received from user {user_id}")
+    
+    # Simple database check with error handling
+    try:
+        if not await db.user_exists(user_id):
+            await db.add_user(user_id, user.username, user.first_name)
+            logger.info(f"New user added: {user_id}")
+    except Exception as e:
+        logger.warning(f"Database operation failed for user {user_id}: {e}")
+        # Continue without database - this is not critical for basic functionality
     
     # Check if start command contains a token (deep linking)
     if context.args and len(context.args) > 0:
@@ -59,74 +65,65 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             token = token.replace("verify_", "")
         
         # Validate token
-        is_valid, token_data = await validate_token(token)
-        if is_valid and token_data:
-            # Update user subscription based on token plan
-            plan_days = token_data.get("plan_days", 0)
-            if plan_days > 0:
-                await update_user_subscription(user_id, plan_days)
-                
-                await update.message.reply_text(
-                    f"✅ Your subscription has been activated successfully!\n\n"
-                    f"Plan: {plan_days} days\n"
-                    f"You now have full access to {TARGET_BOT_USERNAME}."
-                )
+        try:
+            is_valid, token_data = await validate_token(token)
+            if is_valid and token_data:
+                # Update user subscription based on token plan
+                plan_days = token_data.get("plan_days", 0)
+                if plan_days > 0:
+                    try:
+                        await update_user_subscription(user_id, plan_days)
+                        await update.message.reply_text(
+                            f"✅ Your subscription has been activated successfully!\n\n"
+                            f"Plan: {plan_days} days\n"
+                            f"You now have full access to {TARGET_BOT_USERNAME}."
+                        )
+                    except Exception as e:
+                        logger.error(f"Subscription update failed: {e}")
+                        await update.message.reply_text(
+                            f"✅ Your verification was successful!\n\n"
+                            f"You now have access to {TARGET_BOT_USERNAME}."
+                        )
+                else:
+                    # Free tier verification
+                    await update.message.reply_text(
+                        f"✅ Your verification was successful!\n\n"
+                        f"You now have basic access to {TARGET_BOT_USERNAME}."
+                    )
+                return
             else:
-                # Free tier verification
                 await update.message.reply_text(
-                    f"✅ Your verification was successful!\n\n"
-                    f"You now have basic access to {TARGET_BOT_USERNAME}."
+                    "❌ Invalid or expired verification token.\n\n"
+                    "Please request a new verification link."
                 )
-            
-            return
-        else:
+                return
+        except Exception as e:
+            logger.error(f"Token validation failed: {e}")
             await update.message.reply_text(
-                "❌ Invalid or expired verification token.\n\n"
-                "Please request a new verification link."
+                "❌ Error processing your token. Please try again."
             )
             return
     
-    # Welcome message with automatic token generation
-    # Generate a free access token immediately
-    try:
-        verification_url = await generate_verification_url(user_id, 0)  # 0 = free tier
-        
-        keyboard = [
-            [InlineKeyboardButton("🚀 Get Free Access", url=verification_url)],
-            [InlineKeyboardButton(f"🔹 Basic Plan ({BASIC_PLAN_DAYS} days) - ${BASIC_PLAN_PRICE}", callback_data=f"plan_basic")],
-            [InlineKeyboardButton(f"🔸 Standard Plan ({STANDARD_PLAN_DAYS} days) - ${STANDARD_PLAN_PRICE}", callback_data=f"plan_standard")],
-            [InlineKeyboardButton(f"💎 Premium Plan ({PREMIUM_PLAN_DAYS} days) - ${PREMIUM_PLAN_PRICE}", callback_data=f"plan_premium")],
-            [InlineKeyboardButton("📊 My Subscription", callback_data="my_subscription")],
-            [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            f"🎉 Welcome to {TARGET_BOT_USERNAME} Authorization!\n\n"
-            f"You can get instant FREE access to {TARGET_BOT_USERNAME} or choose a premium plan for enhanced features.\n\n"
-            f"📱 *Free Access:* Click the button below for immediate access\n"
-            f"💎 *Premium Plans:* Choose from our subscription options for unlimited access\n\n"
-            f"Your verification link is ready:",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        
-    except Exception as e:
-        logger.error(f"Error generating verification URL: {e}")
-        # Fallback to manual verification
-        keyboard = [
-            [InlineKeyboardButton("🔄 Generate Access Link", callback_data="generate_free_access")],
-            [InlineKeyboardButton(f"🔹 Basic Plan ({BASIC_PLAN_DAYS} days) - ${BASIC_PLAN_PRICE}", callback_data=f"plan_basic")],
-            [InlineKeyboardButton(f"🔸 Standard Plan ({STANDARD_PLAN_DAYS} days) - ${STANDARD_PLAN_PRICE}", callback_data=f"plan_standard")],
-            [InlineKeyboardButton(f"💎 Premium Plan ({PREMIUM_PLAN_DAYS} days) - ${PREMIUM_PLAN_PRICE}", callback_data=f"plan_premium")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            f"Welcome to the {TARGET_BOT_USERNAME} Authorization Bot!\n\n"
-            f"Click below to generate your access link or choose a subscription plan:",
-            reply_markup=reply_markup
-        )
+    # Simple welcome message - generate access link via button to avoid startup issues
+    keyboard = [
+        [InlineKeyboardButton("🚀 Get Free Access", callback_data="generate_free_access")],
+        [InlineKeyboardButton(f"🔹 Basic Plan ({BASIC_PLAN_DAYS} days) - ${BASIC_PLAN_PRICE}", callback_data=f"plan_basic")],
+        [InlineKeyboardButton(f"🔸 Standard Plan ({STANDARD_PLAN_DAYS} days) - ${STANDARD_PLAN_PRICE}", callback_data=f"plan_standard")],
+        [InlineKeyboardButton(f"💎 Premium Plan ({PREMIUM_PLAN_DAYS} days) - ${PREMIUM_PLAN_PRICE}", callback_data=f"plan_premium")],
+        [InlineKeyboardButton("📊 My Subscription", callback_data="my_subscription")],
+        [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        f"🎉 Welcome to {TARGET_BOT_USERNAME} Authorization!\n\n"
+        f"Get instant FREE access to {TARGET_BOT_USERNAME} or choose a premium plan.\n\n"
+        f"📱 *Free Access:* Click below for immediate access\n"
+        f"💎 *Premium Plans:* Enhanced features and unlimited access\n\n"
+        f"Choose an option:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
 
 @track_help_command
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -248,6 +245,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if callback_data == "generate_free_access":
         # Generate free access token for any user
         try:
+            logger.info(f"Generating free access for user {user_id}")
             verification_url = await generate_verification_url(user_id, 0)  # 0 = free tier
             
             keyboard = [
@@ -266,11 +264,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
+            logger.info(f"Free access link generated successfully for user {user_id}")
             
         except Exception as e:
-            logger.error(f"Error generating free access: {e}")
+            logger.error(f"Error generating free access for user {user_id}: {e}")
             await query.edit_message_text(
-                f"❌ Error generating access link. Please try again later or contact support.",
+                f"❌ Sorry, there was an error generating your access link.\n\n"
+                f"This might be a temporary issue. Please try again in a moment.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔄 Try Again", callback_data="generate_free_access")],
                     [InlineKeyboardButton("🔙 Back", callback_data="back_to_main")]
@@ -627,6 +627,14 @@ async def main() -> None:
     if not db_setup_success:
         logger.error("Failed to setup database. Exiting...")
         return
+    
+    # Connect the global database manager
+    try:
+        await db.connect()
+        logger.info("Database manager connected successfully")
+    except Exception as e:
+        logger.error(f"Failed to connect database manager: {e}")
+        logger.info("Bot will continue with limited functionality")
     
     # Create the Application
     application = Application.builder().token(AUTH_BOT_TOKEN).build()
