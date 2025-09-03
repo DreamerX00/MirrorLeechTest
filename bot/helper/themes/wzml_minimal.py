@@ -9,7 +9,15 @@ class WZMLStyle:
     ST_MSG = """<i>This bot can mirror all your links|files|torrents to Google Drive or any rclone cloud or to telegram or to ddl servers.</i>
 <b>Type {help_command} to get a list of available commands</b>"""
     ST_BOTPM = """<i>Now, This bot will send all your files and links here. Start Using ...</i>"""
-    ST_UNAUTH = """<i>You Are not authorized user! Deploy your own WZML-X Mirror-Leech bot</i>"""
+    ST_UNAUTH = """<i>🔒 <b>Authorization Required</b>
+
+To use this bot, you need an active subscription. Please click the button below to get authorized access to all bot features.
+
+✨ <b>Features Available:</b>
+• Mirror files to Google Drive
+• Leech files to Telegram
+• Support for torrents, direct links, and more
+• High-speed transfers</i>"""
     OWN_TOKEN_GENERATE = (
         """<b>Temporary Token is not yours!</b>\n\n<i>Kindly generate your own.</i>"""
     )

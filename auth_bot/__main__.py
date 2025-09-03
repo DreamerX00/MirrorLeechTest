@@ -85,23 +85,48 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 "Please request a new verification link."
             )
             return
-            
-    # Welcome message with subscription options
-    keyboard = [
-        [InlineKeyboardButton(f"🔹 Basic Plan ({BASIC_PLAN_DAYS} days) - ${BASIC_PLAN_PRICE}", callback_data=f"plan_basic")],
-        [InlineKeyboardButton(f"🔸 Standard Plan ({STANDARD_PLAN_DAYS} days) - ${STANDARD_PLAN_PRICE}", callback_data=f"plan_standard")],
-        [InlineKeyboardButton(f"💎 Premium Plan ({PREMIUM_PLAN_DAYS} days) - ${PREMIUM_PLAN_PRICE}", callback_data=f"plan_premium")],
-        [InlineKeyboardButton("📊 My Subscription", callback_data="my_subscription")],
-        [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
-        f"Welcome to the {TARGET_BOT_USERNAME} Authorization Bot!\n\n"
-        f"This bot helps you get access to {TARGET_BOT_USERNAME} through our subscription plans.\n\n"
-        f"Please select a subscription plan to continue:",
-        reply_markup=reply_markup
-    )
+    # Welcome message with automatic token generation
+    # Generate a free access token immediately
+    try:
+        verification_url = await generate_verification_url(user_id, 0)  # 0 = free tier
+        
+        keyboard = [
+            [InlineKeyboardButton("🚀 Get Free Access", url=verification_url)],
+            [InlineKeyboardButton(f"🔹 Basic Plan ({BASIC_PLAN_DAYS} days) - ${BASIC_PLAN_PRICE}", callback_data=f"plan_basic")],
+            [InlineKeyboardButton(f"🔸 Standard Plan ({STANDARD_PLAN_DAYS} days) - ${STANDARD_PLAN_PRICE}", callback_data=f"plan_standard")],
+            [InlineKeyboardButton(f"💎 Premium Plan ({PREMIUM_PLAN_DAYS} days) - ${PREMIUM_PLAN_PRICE}", callback_data=f"plan_premium")],
+            [InlineKeyboardButton("📊 My Subscription", callback_data="my_subscription")],
+            [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"🎉 Welcome to {TARGET_BOT_USERNAME} Authorization!\n\n"
+            f"You can get instant FREE access to {TARGET_BOT_USERNAME} or choose a premium plan for enhanced features.\n\n"
+            f"📱 *Free Access:* Click the button below for immediate access\n"
+            f"💎 *Premium Plans:* Choose from our subscription options for unlimited access\n\n"
+            f"Your verification link is ready:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating verification URL: {e}")
+        # Fallback to manual verification
+        keyboard = [
+            [InlineKeyboardButton("🔄 Generate Access Link", callback_data="generate_free_access")],
+            [InlineKeyboardButton(f"🔹 Basic Plan ({BASIC_PLAN_DAYS} days) - ${BASIC_PLAN_PRICE}", callback_data=f"plan_basic")],
+            [InlineKeyboardButton(f"🔸 Standard Plan ({STANDARD_PLAN_DAYS} days) - ${STANDARD_PLAN_PRICE}", callback_data=f"plan_standard")],
+            [InlineKeyboardButton(f"💎 Premium Plan ({PREMIUM_PLAN_DAYS} days) - ${PREMIUM_PLAN_PRICE}", callback_data=f"plan_premium")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"Welcome to the {TARGET_BOT_USERNAME} Authorization Bot!\n\n"
+            f"Click below to generate your access link or choose a subscription plan:",
+            reply_markup=reply_markup
+        )
 
 @track_help_command
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -220,6 +245,39 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await handle_verify_callback(update, context)
         return
     
+    if callback_data == "generate_free_access":
+        # Generate free access token for any user
+        try:
+            verification_url = await generate_verification_url(user_id, 0)  # 0 = free tier
+            
+            keyboard = [
+                [InlineKeyboardButton("🚀 Access Main Bot", url=verification_url)],
+                [InlineKeyboardButton("🔄 Generate New Link", callback_data="generate_free_access")],
+                [InlineKeyboardButton("💎 Upgrade to Premium", callback_data="back_to_main")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                f"🎉 *Free Access Generated!*\n\n"
+                f"Your verification link is ready! Click the button below to access {TARGET_BOT_USERNAME}.\n\n"
+                f"🔗 This link will expire in 6 hours\n"
+                f"🆓 Free tier includes basic features\n"
+                f"💎 Upgrade to premium for unlimited access",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
+        except Exception as e:
+            logger.error(f"Error generating free access: {e}")
+            await query.edit_message_text(
+                f"❌ Error generating access link. Please try again later or contact support.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Try Again", callback_data="generate_free_access")],
+                    [InlineKeyboardButton("🔙 Back", callback_data="back_to_main")]
+                ])
+            )
+        return
+    
     if callback_data == "help":
         help_text = (
             f"🔹 *{AUTH_BOT_USERNAME} Help*\n\n"
@@ -236,6 +294,28 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"For any issues, please contact an admin."
         )
         await query.edit_message_text(text=help_text, parse_mode='Markdown')
+    
+    elif callback_data == "show_plans":
+        keyboard = [
+            [InlineKeyboardButton("🆓 Get Free Access", callback_data="generate_free_access")],
+            [InlineKeyboardButton(f"🔹 Basic Plan ({BASIC_PLAN_DAYS} days) - ${BASIC_PLAN_PRICE}", callback_data=f"plan_basic")],
+            [InlineKeyboardButton(f"🔸 Standard Plan ({STANDARD_PLAN_DAYS} days) - ${STANDARD_PLAN_PRICE}", callback_data=f"plan_standard")],
+            [InlineKeyboardButton(f"💎 Premium Plan ({PREMIUM_PLAN_DAYS} days) - ${PREMIUM_PLAN_PRICE}", callback_data=f"plan_premium")],
+            [InlineKeyboardButton("📊 My Subscription", callback_data="my_subscription")],
+            [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            f"🎯 *Choose Your Access Level*\n\n"
+            f"🆓 **Free Access:** Basic features, limited usage\n"
+            f"🔹 **Basic Plan:** {BASIC_PLAN_DAYS} days - ${BASIC_PLAN_PRICE}\n"
+            f"🔸 **Standard Plan:** {STANDARD_PLAN_DAYS} days - ${STANDARD_PLAN_PRICE}\n"
+            f"💎 **Premium Plan:** {PREMIUM_PLAN_DAYS} days - ${PREMIUM_PLAN_PRICE}\n\n"
+            f"Select an option below:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
     
     elif callback_data == "my_subscription":
         subscription = await get_subscription_status(user_id)

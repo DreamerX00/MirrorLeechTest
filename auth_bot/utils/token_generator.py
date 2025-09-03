@@ -230,19 +230,32 @@ async def generate_verification_url(user_id: int, plan_days: int = 0) -> str:
         plan_days: Number of days for the subscription plan (0 for free tier)
         
     Returns:
-        The verification URL
+        The verification URL (shortened if available, otherwise original)
     """
     from auth_bot import TARGET_BOT_USERNAME
     from auth_bot.utils.url_shortener import shorten_url
     
-    # Generate token
-    token = await generate_token(user_id, plan_days)
-    
-    # Create verification URL
-    verification_url = f"https://t.me/{TARGET_BOT_USERNAME}?start=verify_{token}"
-    
-    # Shorten URL if shortener is available
-    shortened_url = await shorten_url(verification_url)
-    
-    # Return shortened URL if available, otherwise return original
-    return shortened_url if shortened_url and shortened_url != verification_url else verification_url
+    try:
+        # Generate token
+        token = await generate_token(user_id, plan_days)
+        
+        # Create verification URL
+        verification_url = f"https://t.me/{TARGET_BOT_USERNAME}?start=verify_{token}"
+        
+        # Try to shorten URL if shortener is available
+        try:
+            shortened_url = await shorten_url(verification_url)
+            # Return shortened URL if successful and different from original
+            if shortened_url and shortened_url != verification_url:
+                logger.info(f"URL shortened successfully for user {user_id}")
+                return shortened_url
+            else:
+                logger.info(f"URL shortener not available or failed, using original URL for user {user_id}")
+                return verification_url
+        except Exception as e:
+            logger.warning(f"URL shortening failed for user {user_id}: {e}, using original URL")
+            return verification_url
+            
+    except Exception as e:
+        logger.error(f"Error generating verification URL for user {user_id}: {e}")
+        raise

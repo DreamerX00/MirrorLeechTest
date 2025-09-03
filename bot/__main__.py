@@ -86,6 +86,8 @@ from .modules import (
     gd_clean,
     broadcast,
     category_select,
+    unauthorized_handler,
+    auth_integration,
 )
 
 
@@ -146,7 +148,13 @@ async def start(client, message):
     elif config_dict["BOT_PM"]:
         await sendMessage(message, BotTheme("ST_BOTPM"), reply_markup, photo="IMAGES")
     else:
-        await sendMessage(message, BotTheme("ST_UNAUTH"), reply_markup, photo="IMAGES")
+        # Check if auth_bot integration is enabled
+        if config_dict.get("AUTH_BOT_ENABLED", "False").lower() == "true":
+            from bot.helper.ext_utils.bot_utils import get_auth_button
+            auth_button = get_auth_button(message.from_user.id)
+            await sendMessage(message, BotTheme("ST_UNAUTH"), auth_button, photo="IMAGES")
+        else:
+            await sendMessage(message, BotTheme("ST_UNAUTH"), reply_markup, photo="IMAGES")
     await DbManger().update_pm_users(message.from_user.id)
 
 

@@ -93,4 +93,4 @@ class BotCommands:
         self.BroadcastCommand = [f"broadcast{CMD_SUFFIX}", f"bc{CMD_SUFFIX}"]
 
 
-BotCommands = _BotCommands()
+BotCommands = BotCommands()

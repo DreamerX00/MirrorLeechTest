@@ -2,7 +2,7 @@
 from pyrogram.filters import create
 from pyrogram.enums import ChatType
 
-from bot import user_data, OWNER_ID
+from bot import user_data, OWNER_ID, config_dict
 from bot.helper.telegram_helper.message_utils import chat_info
 
 
@@ -18,18 +18,33 @@ class CustomFilters:
     async def authorized_user(self, _, message):
         user = message.from_user or message.sender_chat
         uid = user.id
+        
+        # Check if user is owner
+        if uid == OWNER_ID:
+            return True
+            
+        # Check local authorization (existing system)
         if bool(
-            uid == OWNER_ID
-            or (
-                uid in user_data
-                and (
-                    user_data[uid].get("is_auth", False)
-                    or user_data[uid].get("is_sudo", False)
-                )
+            uid in user_data
+            and (
+                user_data[uid].get("is_auth", False)
+                or user_data[uid].get("is_sudo", False)
             )
         ):
             return True
 
+        # Check auth_bot integration
+        if config_dict.get("AUTH_BOT_ENABLED", False):
+            try:
+                from bot.helper.ext_utils.bot_utils import check_user_authorization
+                is_authorized, _ = await check_user_authorization(uid)
+                if is_authorized:
+                    return True
+            except Exception as e:
+                # If auth_bot check fails, fall back to local auth only
+                pass
+
+        # Check chat authorization (existing system)
         auth_chat = False
         chat_id = message.chat.id
         if chat_id in user_data and user_data[chat_id].get("is_auth", False):
